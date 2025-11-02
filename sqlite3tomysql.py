@@ -13,6 +13,7 @@ import sqlite3
 import mysql.connector
 import argparse
 import sys
+import re
 from typing import List, Tuple, Optional
 
 
@@ -87,7 +88,6 @@ class SQLiteToMySQLMigrator:
             ValueError: If identifier contains invalid characters
         """
         # Allow alphanumeric, underscore, and hyphen
-        import re
         if not re.match(r'^[a-zA-Z0-9_-]+$', identifier):
             raise ValueError(f"Invalid identifier: {identifier}. Only alphanumeric, underscore, and hyphen allowed.")
         return identifier
@@ -105,7 +105,8 @@ class SQLiteToMySQLMigrator:
         # Validate table name to prevent SQL injection
         validated_name = self._validate_identifier(table_name)
         cursor = self.sqlite_conn.cursor()
-        cursor.execute(f"PRAGMA table_info({validated_name});")
+        # Use backticks for proper identifier quoting
+        cursor.execute(f"PRAGMA table_info(`{validated_name}`);")
         schema = cursor.fetchall()
         cursor.close()
         return schema
@@ -182,10 +183,10 @@ class SQLiteToMySQLMigrator:
                 col_def += " NOT NULL"
             
             if default_val is not None:
-                # Properly handle default values - quote strings, keep numeric as-is
+                # Properly handle default values
                 if isinstance(default_val, str):
-                    # Escape single quotes in the default value
-                    escaped_val = default_val.replace("'", "''")
+                    # Use MySQL's QUOTE function approach: escape backslashes first, then single quotes
+                    escaped_val = default_val.replace('\\', '\\\\').replace("'", "\\'")
                     col_def += f" DEFAULT '{escaped_val}'"
                 else:
                     col_def += f" DEFAULT {default_val}"
@@ -200,7 +201,12 @@ class SQLiteToMySQLMigrator:
             pk_cols = ", ".join([f"`{pk}`" for pk in primary_keys])
             columns.append(f"PRIMARY KEY ({pk_cols})")
         
-        create_table_sql = f"CREATE TABLE IF NOT EXISTS `{validated_table_name}` ({', '.join(columns)}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+        # Build CREATE TABLE statement
+        create_table_sql = (
+            f"CREATE TABLE IF NOT EXISTS `{validated_table_name}` "
+            f"({', '.join(columns)}) "
+            f"ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+        )
         
         try:
             cursor.execute(create_table_sql)
