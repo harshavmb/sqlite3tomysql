@@ -6,7 +6,9 @@ Sqlite3 to mariadb migration script
 For migrating Uptime Kuma from SQLite3 to MariaDB, follow these steps carefully:
 
 ### Prerequisites
-⚠️ **Important**: First bump to V2 using sqlite3 database (migration scripts get executed & your schema will be in good shape). Don't migrate from sqlite3 -> mariadb from v1 -> v2 (not going to work as v2 is a major version, your v1 schema is not compatible with v2)
+⚠️ **Important**: First bump to V2 using SQLite3 database before migrating to MariaDB. This ensures migration scripts get executed and your schema will be in good shape. 
+
+**Do not migrate from SQLite3 to MariaDB while going from v1 to v2** - this will not work as v2 is a major version and your v1 schema is not compatible with v2.
 
 ### Migration Process
 
