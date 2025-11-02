@@ -73,6 +73,25 @@ class SQLiteToMySQLMigrator:
         cursor.close()
         return tables
     
+    def _validate_identifier(self, identifier: str) -> str:
+        """
+        Validate and sanitize SQL identifiers (table/column names).
+        
+        Args:
+            identifier: SQL identifier to validate
+            
+        Returns:
+            Validated identifier
+            
+        Raises:
+            ValueError: If identifier contains invalid characters
+        """
+        # Allow alphanumeric, underscore, and hyphen
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', identifier):
+            raise ValueError(f"Invalid identifier: {identifier}. Only alphanumeric, underscore, and hyphen allowed.")
+        return identifier
+    
     def get_table_schema(self, table_name: str) -> List[Tuple]:
         """
         Get schema information for a table from SQLite.
@@ -83,8 +102,10 @@ class SQLiteToMySQLMigrator:
         Returns:
             List of tuples with column information (cid, name, type, notnull, dflt_value, pk)
         """
+        # Validate table name to prevent SQL injection
+        validated_name = self._validate_identifier(table_name)
         cursor = self.sqlite_conn.cursor()
-        cursor.execute(f"PRAGMA table_info({table_name});")
+        cursor.execute(f"PRAGMA table_info({validated_name});")
         schema = cursor.fetchall()
         cursor.close()
         return schema
@@ -139,6 +160,8 @@ class SQLiteToMySQLMigrator:
             table_name: Name of the table to create
             schema: Schema information from SQLite
         """
+        # Validate table name to prevent SQL injection
+        validated_table_name = self._validate_identifier(table_name)
         cursor = self.mysql_conn.cursor()
         
         # Build CREATE TABLE statement
@@ -148,18 +171,27 @@ class SQLiteToMySQLMigrator:
         for col in schema:
             col_id, col_name, col_type, not_null, default_val, is_pk = col
             
+            # Validate column name
+            validated_col_name = self._validate_identifier(col_name)
+            
             mysql_type = self.sqlite_to_mysql_type(col_type if col_type else 'TEXT')
             
-            col_def = f"`{col_name}` {mysql_type}"
+            col_def = f"`{validated_col_name}` {mysql_type}"
             
             if not_null:
                 col_def += " NOT NULL"
             
             if default_val is not None:
-                col_def += f" DEFAULT {default_val}"
+                # Properly handle default values - quote strings, keep numeric as-is
+                if isinstance(default_val, str):
+                    # Escape single quotes in the default value
+                    escaped_val = default_val.replace("'", "''")
+                    col_def += f" DEFAULT '{escaped_val}'"
+                else:
+                    col_def += f" DEFAULT {default_val}"
             
             if is_pk:
-                primary_keys.append(col_name)
+                primary_keys.append(validated_col_name)
             
             columns.append(col_def)
         
@@ -168,7 +200,7 @@ class SQLiteToMySQLMigrator:
             pk_cols = ", ".join([f"`{pk}`" for pk in primary_keys])
             columns.append(f"PRIMARY KEY ({pk_cols})")
         
-        create_table_sql = f"CREATE TABLE IF NOT EXISTS `{table_name}` ({', '.join(columns)}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+        create_table_sql = f"CREATE TABLE IF NOT EXISTS `{validated_table_name}` ({', '.join(columns)}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
         
         try:
             cursor.execute(create_table_sql)
@@ -180,36 +212,54 @@ class SQLiteToMySQLMigrator:
         finally:
             cursor.close()
     
-    def migrate_table_data(self, table_name: str):
+    def migrate_table_data(self, table_name: str, batch_size: int = 1000):
         """
-        Migrate data from SQLite table to MySQL table.
+        Migrate data from SQLite table to MySQL table using batch processing.
         
         Args:
             table_name: Name of the table to migrate
+            batch_size: Number of rows to process per batch (default: 1000)
         """
+        # Validate table name to prevent SQL injection
+        validated_table_name = self._validate_identifier(table_name)
+        
         sqlite_cursor = self.sqlite_conn.cursor()
         mysql_cursor = self.mysql_conn.cursor()
         
         try:
-            # Get all data from SQLite table
-            sqlite_cursor.execute(f"SELECT * FROM `{table_name}`;")
-            rows = sqlite_cursor.fetchall()
+            # Count total rows
+            sqlite_cursor.execute(f"SELECT COUNT(*) FROM `{validated_table_name}`;")
+            total_rows = sqlite_cursor.fetchone()[0]
             
-            if not rows:
+            if total_rows == 0:
                 print(f"  ✓ No data to migrate for table: {table_name}")
                 return
             
-            # Get column count
-            column_count = len(rows[0])
+            # Get column count for placeholders
+            sqlite_cursor.execute(f"SELECT * FROM `{validated_table_name}` LIMIT 1;")
+            sample_row = sqlite_cursor.fetchone()
+            if not sample_row:
+                print(f"  ✓ No data to migrate for table: {table_name}")
+                return
+                
+            column_count = len(sample_row)
             placeholders = ', '.join(['%s'] * column_count)
+            insert_sql = f"INSERT INTO `{validated_table_name}` VALUES ({placeholders})"
             
-            # Insert data into MySQL
-            insert_sql = f"INSERT INTO `{table_name}` VALUES ({placeholders})"
+            # Process data in batches to avoid memory issues
+            rows_migrated = 0
+            sqlite_cursor.execute(f"SELECT * FROM `{validated_table_name}`;")
             
-            mysql_cursor.executemany(insert_sql, rows)
-            self.mysql_conn.commit()
+            while True:
+                rows = sqlite_cursor.fetchmany(batch_size)
+                if not rows:
+                    break
+                
+                mysql_cursor.executemany(insert_sql, rows)
+                self.mysql_conn.commit()
+                rows_migrated += len(rows)
             
-            print(f"  ✓ Migrated {len(rows)} rows to table: {table_name}")
+            print(f"  ✓ Migrated {rows_migrated} rows to table: {table_name}")
             
         except mysql.connector.Error as e:
             print(f"  ✗ Error migrating data for table {table_name}: {e}")
@@ -242,11 +292,18 @@ class SQLiteToMySQLMigrator:
         for table_name in tables:
             print(f"Processing table: {table_name}")
             
+            # Validate table name
+            try:
+                validated_table_name = self._validate_identifier(table_name)
+            except ValueError as e:
+                print(f"  ✗ Skipping table due to invalid name: {e}")
+                continue
+            
             # Drop table if requested
             if drop_existing:
                 cursor = self.mysql_conn.cursor()
                 try:
-                    cursor.execute(f"DROP TABLE IF EXISTS `{table_name}`;")
+                    cursor.execute(f"DROP TABLE IF EXISTS `{validated_table_name}`;")
                     self.mysql_conn.commit()
                     print(f"  ✓ Dropped existing table: {table_name}")
                 except mysql.connector.Error as e:
