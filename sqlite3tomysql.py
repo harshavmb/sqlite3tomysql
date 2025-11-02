@@ -30,7 +30,6 @@ class SQLiteToMySQLMigrator:
         """
         self.sqlite_db_path = sqlite_db_path
         self.mysql_config = mysql_config
-        self.mysql_database = mysql_config.get('database', 'N/A')  # Store separately for safe logging
         self.sqlite_conn = None
         self.mysql_conn = None
         
@@ -43,7 +42,7 @@ class SQLiteToMySQLMigrator:
             
             # Connect to MySQL
             self.mysql_conn = mysql.connector.connect(**self.mysql_config)
-            print(f"✓ Connected to MySQL database: {self.mysql_database}")
+            print(f"✓ Connected to MySQL server")
             
         except sqlite3.Error as e:
             print(f"✗ SQLite connection error: {e}")
