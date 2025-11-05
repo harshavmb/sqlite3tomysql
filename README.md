@@ -47,6 +47,8 @@ Before running the migration script, ensure you have the following setup:
 The migration script provides comprehensive SQLite to MySQL/MariaDB migration with the following capabilities:
 
 - **Smart Type Mapping**: Automatically converts SQLite data types to appropriate MySQL equivalents
+  - Correctly maps `TIME` columns to MySQL `TIME` (not `DATETIME`)
+  - Handles `DATE`, `DATETIME`, and `TIMESTAMP` appropriately
 - **Reserved Word Handling**: Escapes MySQL reserved keywords (like `group`, `order`, `key`) with backticks
 - **Index Compatibility**: Handles MySQL's 767-byte index limit by adjusting VARCHAR lengths for indexed columns
 - **Foreign Key Management**: Temporarily disables foreign key checks during migration
@@ -170,4 +172,6 @@ For migrating Uptime Kuma from SQLite3 to MariaDB, follow these steps carefully:
 
 This script handles several quirks specific to the migration:
 - **Reserved Keywords**: Tables named `group` (MariaDB won't allow as it's a reserved keyword, but the script circumvents this with escape characters)
+- **TIME vs DATETIME Mapping**: Correctly preserves `TIME` columns (like `start_time`/`end_time` in `maintenance` table) as `TIME` in MySQL instead of incorrectly converting to `DATETIME`
+- **Index Length Limitations**: Handles MySQL's 767-byte index key length limit by adjusting VARCHAR sizes for indexed columns
 - Other edge cases are handled automatically by the script
