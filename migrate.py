@@ -64,10 +64,13 @@ def map_sqlite_to_mysql_type(sqlite_type_raw, is_primary_key=False, is_unique=Fa
         return "DECIMAL(10,2)"
     elif "BOOL" in sqlite_type:
         return "TINYINT(1)"
-    elif "DATE" in sqlite_type or "TIME" in sqlite_type:
-        # In older MySQL, DATETIME doesn't support CURRENT_TIMESTAMP default.
-        # We'll use DATETIME and have the app populate 'created_at'.
-        # 'updated_at' will use TIMESTAMP with ON UPDATE.
+    elif sqlite_type == "TIME":
+        # Handle TIME type specifically - should remain TIME in MySQL
+        # This fixes the issue where start_time/end_time in maintenance table
+        # were incorrectly converted to DATETIME instead of TIME
+        return "TIME"
+    elif "DATE" in sqlite_type:
+        # Handle DATE and DATETIME types - both map to DATETIME in MySQL
         return "DATETIME"
     else:
         print(f"Warning: Unknown SQLite type '{sqlite_type_raw}'. Defaulting to VARCHAR(255).")
