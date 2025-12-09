@@ -22,8 +22,25 @@ def detect_is_mariadb(mysql_cursor):
         # MariaDB version strings contain 'MariaDB' (case-insensitive)
         return 'mariadb' in version_string.lower()
     except (mysql.connector.Error, AttributeError) as e:
-        print(f"Warning: Could not detect database type: {e}. Assuming MySQL (stricter rules).")
+        print(f"Warning: Could not detect database type via mysql.connector: {e}. Assuming MySQL (stricter rules).")
         return False  # Default to MySQL (more restrictive) if detection fails
+
+def should_skip_default_for_mysql(mysql_type, is_mariadb):
+    """
+    Determines if DEFAULT value should be skipped for a given MySQL column type.
+    MySQL (not MariaDB) does not support DEFAULT values for certain types.
+    
+    Args:
+        mysql_type: The MySQL column type (e.g., "LONGTEXT", "VARCHAR(255)")
+        is_mariadb: Boolean indicating if target database is MariaDB
+    
+    Returns:
+        True if DEFAULT should be skipped, False otherwise
+    """
+    # Extract the base type name without size/parameters (e.g., "VARCHAR(255)" -> "VARCHAR")
+    base_type = mysql_type.split('(')[0].strip().upper()
+    is_problematic_type = base_type in MYSQL_NO_DEFAULT_TYPES
+    return is_problematic_type and not is_mariadb
 
 def escape_mysql_reserved_words(table_name):
     """
@@ -224,10 +241,7 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                     not_null_sql = ""
 
                 # Check if this column type cannot have DEFAULT values on MySQL (but can on MariaDB)
-                # Extract the base type name without size/parameters (e.g., "VARCHAR(255)" -> "VARCHAR")
-                base_type = mysql_type.split('(')[0].strip().upper()
-                is_problematic_type = base_type in MYSQL_NO_DEFAULT_TYPES
-                skip_default_for_type = is_problematic_type and not is_mariadb
+                skip_default_for_type = should_skip_default_for_mysql(mysql_type, is_mariadb)
                 
                 default_sql = ""
                 # Handle default values. Special case for created_at/updated_at to manage in app if needed.
@@ -266,7 +280,7 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                         default_sql = f" DEFAULT {default_value}"
                 elif default_value is not None and skip_default_for_type:
                     # Skip DEFAULT for problematic types on MySQL
-                    print(f"Info: Skipping DEFAULT value for {mysql_type} column '{col_name}' on MySQL (not supported).")
+                    print(f"Info: Skipping DEFAULT value '{default_value}' for {mysql_type} column '{col_name}' on MySQL (not supported).")
                 
                 # Add ON UPDATE CURRENT_TIMESTAMP specifically for 'updated_at' column in api_key table
                 on_update_clause = ""
