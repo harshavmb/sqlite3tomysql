@@ -200,16 +200,10 @@ def verify_mysql_schema():
                 
                 if is_text_blob:
                     if default is not None and default != 'NULL':
-                        # On MySQL: This is an ERROR - should not have DEFAULT
-                        # On MariaDB: This is ALLOWED and EXPECTED
-                        if is_mysql:
-                            msg = f"  ❌ PROBLEM: `{col_name}` ({col_type}) has DEFAULT '{default}'"
-                            print(msg)
-                            issues_found.append(f"{table}.{col_name}: {col_type} with DEFAULT {default}")
-                        else:
-                            msg = f"  ✅ CORRECT (MariaDB): `{col_name}` ({col_type}) has DEFAULT '{default}'"
-                            print(msg)
-                            successes.append(f"{table}.{col_name}: {col_type} with DEFAULT")
+                        # This is an ERROR on MySQL
+                        msg = f"  ❌ PROBLEM: `{col_name}` ({col_type}) has DEFAULT '{default}'"
+                        print(msg)
+                        issues_found.append(f"{table}.{col_name}: {col_type} with DEFAULT {default}")
                     else:
                         msg = f"  ✅ CORRECT: `{col_name}` ({col_type}) has no DEFAULT"
                         print(msg)
@@ -222,20 +216,17 @@ def verify_mysql_schema():
         print("="*80)
         print("SUMMARY")
         print("="*80)
-        print(f"\n✅ Correct TEXT/BLOB columns: {len(successes)}")
+        print(f"\n✅ Correct TEXT/BLOB columns (no DEFAULT): {len(successes)}")
         for s in successes:
             print(f"   - {s}")
         
         if issues_found:
-            print(f"\n❌ Problematic TEXT/BLOB columns (has DEFAULT on MySQL): {len(issues_found)}")
+            print(f"\n❌ Problematic TEXT/BLOB columns (has DEFAULT): {len(issues_found)}")
             for issue in issues_found:
                 print(f"   - {issue}")
             print("\n⚠️  These DEFAULT values will cause Error 1101 on MySQL!")
         else:
-            if is_mysql:
-                print("\n✅ No issues found! All TEXT/BLOB columns correctly have no DEFAULT values on MySQL.")
-            else:
-                print("\n✅ No issues found! TEXT/BLOB columns correctly handle DEFAULT values for MariaDB.")
+            print("\n✅ No issues found! All TEXT/BLOB columns correctly have no DEFAULT values on MySQL.")
         
         # Test data integrity
         print("\n" + "="*80)
@@ -273,7 +264,7 @@ def verify_mysql_schema():
 
 if __name__ == "__main__":
     print("="*80)
-    print("TEST: LONGTEXT DEFAULT VALUE HANDLING ON MYSQL/MARIADB")
+    print("TEST: LONGTEXT DEFAULT VALUE HANDLING ON MYSQL")
     print("="*80 + "\n")
     
     # Step 1: Create test database
@@ -286,11 +277,11 @@ if __name__ == "__main__":
         
         if success:
             print("\n" + "="*80)
-            print("✅ TEST PASSED: TEXT/BLOB DEFAULT values handled correctly")
+            print("✅ TEST PASSED: LONGTEXT columns correctly have no DEFAULT on MySQL")
             print("="*80)
         else:
             print("\n" + "="*80)
-            print("❌ TEST FAILED: Some TEXT/BLOB columns have incorrect DEFAULT handling on MySQL")
+            print("❌ TEST FAILED: Some LONGTEXT columns incorrectly have DEFAULT values")
             print("="*80)
     else:
         print("\n❌ Migration failed, cannot verify schema")
