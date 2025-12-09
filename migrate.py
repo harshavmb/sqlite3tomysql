@@ -31,14 +31,15 @@ def should_skip_default_for_mysql(mysql_type, is_mariadb):
     MySQL (not MariaDB) does not support DEFAULT values for certain types.
     
     Args:
-        mysql_type: The MySQL column type (e.g., "LONGTEXT", "VARCHAR(255)")
+        mysql_type: The MySQL column type (e.g., "LONGTEXT", "VARCHAR(255)", "INT UNSIGNED")
         is_mariadb: Boolean indicating if target database is MariaDB
     
     Returns:
         True if DEFAULT should be skipped, False otherwise
     """
-    # Extract the base type name without size/parameters (e.g., "VARCHAR(255)" -> "VARCHAR")
-    base_type = mysql_type.split('(')[0].strip().upper()
+    # Extract the base type name without size/parameters and modifiers
+    # Examples: "VARCHAR(255)" -> "VARCHAR", "INT UNSIGNED" -> "INT", "TINYINT(1)" -> "TINYINT"
+    base_type = mysql_type.split()[0].split('(')[0].strip().upper()
     is_problematic_type = base_type in MYSQL_NO_DEFAULT_TYPES
     return is_problematic_type and not is_mariadb
 
