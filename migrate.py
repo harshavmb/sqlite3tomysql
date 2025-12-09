@@ -3,6 +3,14 @@ import mysql.connector
 import re # For regular expressions to parse types
 from datetime import datetime
 
+# MySQL (not MariaDB) does not support DEFAULT values for these column types
+# Reference: MySQL error 1101 - BLOB, TEXT, GEOMETRY or JSON column can't have a default value
+MYSQL_NO_DEFAULT_TYPES = [
+    "LONGTEXT", "TEXT", "MEDIUMTEXT", "TINYTEXT",
+    "BLOB", "LONGBLOB", "MEDIUMBLOB", "TINYBLOB",
+    "JSON", "GEOMETRY"
+]
+
 def detect_is_mariadb(mysql_cursor):
     """
     Detects whether the connected database is MariaDB or MySQL.
@@ -13,7 +21,7 @@ def detect_is_mariadb(mysql_cursor):
         version_string = mysql_cursor.fetchone()[0]
         # MariaDB version strings contain 'MariaDB' (case-insensitive)
         return 'mariadb' in version_string.lower()
-    except Exception as e:
+    except (mysql.connector.Error, AttributeError) as e:
         print(f"Warning: Could not detect database type: {e}. Assuming MySQL (stricter rules).")
         return False  # Default to MySQL (more restrictive) if detection fails
 
@@ -216,10 +224,9 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                     not_null_sql = ""
 
                 # Check if this column type cannot have DEFAULT values on MySQL (but can on MariaDB)
-                # MySQL does not support DEFAULT values for TEXT, LONGTEXT, BLOB, JSON, or GEOMETRY columns
-                problematic_types_for_mysql = ["LONGTEXT", "TEXT", "BLOB", "LONGBLOB", "MEDIUMBLOB", "TINYBLOB", 
-                                               "MEDIUMTEXT", "TINYTEXT", "JSON", "GEOMETRY"]
-                is_problematic_type = any(ptype in mysql_type.upper() for ptype in problematic_types_for_mysql)
+                # Extract the base type name without size/parameters (e.g., "VARCHAR(255)" -> "VARCHAR")
+                base_type = mysql_type.split('(')[0].strip().upper()
+                is_problematic_type = base_type in MYSQL_NO_DEFAULT_TYPES
                 skip_default_for_type = is_problematic_type and not is_mariadb
                 
                 default_sql = ""
