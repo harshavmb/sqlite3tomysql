@@ -38,7 +38,7 @@ Before running the migration script, ensure you have the following setup:
        'host': 'localhost',           # MySQL server host
        'user': 'kuma_user',          # Database user
        'password': 'your_secure_password',  # User password
-       'database': 'kuma'            # Target database name
+       'database': 'mysqldatabase'            # Target database name
    }
    ```
 
@@ -74,7 +74,7 @@ The script will prompt for confirmation before proceeding with the migration.
 
 ```
 python3 migrate.py
-WARNING: This will drop and recreate tables in MySQL database 'kuma'. Are you sure? (yes/no): yes
+WARNING: This will drop and recreate tables in MySQL database 'mysqldatabase'. Are you sure? (yes/no): yes
 Connected to SQLite database: data/kuma.db
 Connected to MySQL database: kuma
 Disabled MySQL foreign key checks.
