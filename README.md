@@ -38,7 +38,7 @@ Before running the migration script, ensure you have the following setup:
        'host': 'localhost',           # MySQL server host
        'user': 'kuma_user',          # Database user
        'password': 'your_secure_password',  # User password
-       'database': 'kuma'            # Target database name
+       'database': 'mysqldatabase'            # Target database name
    }
    ```
 
@@ -49,6 +49,9 @@ The migration script provides comprehensive SQLite to MySQL/MariaDB migration wi
 - **Smart Type Mapping**: Automatically converts SQLite data types to appropriate MySQL equivalents
   - Correctly maps `TIME` columns to MySQL `TIME` (not `DATETIME`)
   - Handles `DATE`, `DATETIME`, and `TIMESTAMP` appropriately
+- **MySQL vs MariaDB Compatibility**: Automatically detects the target server type and adjusts schema generation
+  - Skips DEFAULT values for TEXT, LONGTEXT, BLOB, JSON, and GEOMETRY columns on MySQL (error 1101 prevention)
+  - Retains DEFAULT values for these types on MariaDB (which supports them)
 - **Reserved Word Handling**: Escapes MySQL reserved keywords (like `group`, `order`, `key`) with backticks
 - **Index Compatibility**: Handles MySQL's 767-byte index limit by adjusting VARCHAR lengths for indexed columns
 - **Foreign Key Management**: Temporarily disables foreign key checks during migration
@@ -71,7 +74,7 @@ The script will prompt for confirmation before proceeding with the migration.
 
 ```
 python3 migrate.py
-WARNING: This will drop and recreate tables in MySQL database 'kuma'. Are you sure? (yes/no): yes
+WARNING: This will drop and recreate tables in MySQL database 'mysqldatabase'. Are you sure? (yes/no): yes
 Connected to SQLite database: data/kuma.db
 Connected to MySQL database: kuma
 Disabled MySQL foreign key checks.
@@ -174,4 +177,5 @@ This script handles several quirks specific to the migration:
 - **Reserved Keywords**: Tables named `group` (MariaDB won't allow as it's a reserved keyword, but the script circumvents this with escape characters)
 - **TIME vs DATETIME Mapping**: Correctly preserves `TIME` columns (like `start_time`/`end_time` in `maintenance` table) as `TIME` in MySQL instead of incorrectly converting to `DATETIME`
 - **Index Length Limitations**: Handles MySQL's 767-byte index key length limit by adjusting VARCHAR sizes for indexed columns
+- **MySQL DEFAULT Restrictions**: Automatically detects MySQL and skips DEFAULT values for TEXT, LONGTEXT, BLOB, JSON, and GEOMETRY columns (MySQL error 1101), while preserving them for MariaDB
 - Other edge cases are handled automatically by the script
