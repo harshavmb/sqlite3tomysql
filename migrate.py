@@ -215,9 +215,16 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                 else:
                     not_null_sql = ""
 
+                # Check if this column type cannot have DEFAULT values on MySQL (but can on MariaDB)
+                # MySQL does not support DEFAULT values for TEXT, LONGTEXT, BLOB, JSON, or GEOMETRY columns
+                problematic_types_for_mysql = ["LONGTEXT", "TEXT", "BLOB", "LONGBLOB", "MEDIUMBLOB", "TINYBLOB", 
+                                               "MEDIUMTEXT", "TINYTEXT", "JSON", "GEOMETRY"]
+                is_problematic_type = any(ptype in mysql_type.upper() for ptype in problematic_types_for_mysql)
+                skip_default_for_type = is_problematic_type and not is_mariadb
+                
                 default_sql = ""
                 # Handle default values. Special case for created_at/updated_at to manage in app if needed.
-                if default_value is not None:
+                if default_value is not None and not skip_default_for_type:
                     # Fix for DATETIME('now') FUNCTION - convert SQLite syntax to MySQL
                     default_str = str(default_value).upper().replace('"', "'")
                     if ("DATETIME('NOW')" in default_str or default_str == "DATETIME('NOW')" or 
@@ -246,21 +253,13 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                         "TEXT" in mysql_type or "VARCHAR" in mysql_type or
                         "DATE" in mysql_type or "TIME" in mysql_type or "LONGTEXT" in mysql_type
                     ):
-                        # MySQL (not MariaDB) does not support DEFAULT values for TEXT, LONGTEXT, BLOB, JSON, or GEOMETRY columns
-                        # Check if this is a problematic type for MySQL
-                        problematic_types = ["LONGTEXT", "TEXT", "BLOB", "LONGBLOB", "MEDIUMBLOB", "TINYBLOB", 
-                                            "MEDIUMTEXT", "TINYTEXT", "JSON", "GEOMETRY"]
-                        is_problematic_type = any(ptype in mysql_type.upper() for ptype in problematic_types)
-                        
-                        if is_problematic_type and not is_mariadb:
-                            # Skip DEFAULT for these types on MySQL
-                            print(f"Info: Skipping DEFAULT value for {mysql_type} column '{col_name}' on MySQL (not supported).")
-                            default_sql = ""
-                        else:
-                            default_value_clean = default_value.strip("'\"")
-                            default_sql = f" DEFAULT '{default_value_clean}'"
+                        default_value_clean = default_value.strip("'\"")
+                        default_sql = f" DEFAULT '{default_value_clean}'"
                     else:
                         default_sql = f" DEFAULT {default_value}"
+                elif default_value is not None and skip_default_for_type:
+                    # Skip DEFAULT for problematic types on MySQL
+                    print(f"Info: Skipping DEFAULT value for {mysql_type} column '{col_name}' on MySQL (not supported).")
                 
                 # Add ON UPDATE CURRENT_TIMESTAMP specifically for 'updated_at' column in api_key table
                 on_update_clause = ""
