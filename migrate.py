@@ -3,6 +3,20 @@ import mysql.connector
 import re # For regular expressions to parse types
 from datetime import datetime
 
+def detect_is_mariadb(mysql_cursor):
+    """
+    Detects whether the connected database is MariaDB or MySQL.
+    Returns True if MariaDB, False if MySQL.
+    """
+    try:
+        mysql_cursor.execute("SELECT VERSION()")
+        version_string = mysql_cursor.fetchone()[0]
+        # MariaDB version strings contain 'MariaDB' (case-insensitive)
+        return 'mariadb' in version_string.lower()
+    except Exception as e:
+        print(f"Warning: Could not detect database type: {e}. Assuming MySQL (stricter rules).")
+        return False  # Default to MySQL (more restrictive) if detection fails
+
 def escape_mysql_reserved_words(table_name):
     """
     Escapes MySQL reserved words by wrapping them in backticks.
@@ -97,6 +111,11 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
         mysql_conn = mysql.connector.connect(**mysql_config)
         mysql_cursor = mysql_conn.cursor()
         print(f"Connected to MySQL database: {mysql_config['database']}")
+        
+        # Detect if target is MariaDB or MySQL
+        is_mariadb = detect_is_mariadb(mysql_cursor)
+        db_type = "MariaDB" if is_mariadb else "MySQL"
+        print(f"Detected target database type: {db_type}")
     except mysql.connector.Error as e:
         print(f"Error connecting to MySQL: {e}")
         if sqlite_cursor: sqlite_cursor.close()
@@ -227,8 +246,19 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                         "TEXT" in mysql_type or "VARCHAR" in mysql_type or
                         "DATE" in mysql_type or "TIME" in mysql_type or "LONGTEXT" in mysql_type
                     ):
-                        default_value_clean = default_value.strip("'\"")
-                        default_sql = f" DEFAULT '{default_value_clean}'"
+                        # MySQL (not MariaDB) does not support DEFAULT values for TEXT, LONGTEXT, BLOB, JSON, or GEOMETRY columns
+                        # Check if this is a problematic type for MySQL
+                        problematic_types = ["LONGTEXT", "TEXT", "BLOB", "LONGBLOB", "MEDIUMBLOB", "TINYBLOB", 
+                                            "MEDIUMTEXT", "TINYTEXT", "JSON", "GEOMETRY"]
+                        is_problematic_type = any(ptype in mysql_type.upper() for ptype in problematic_types)
+                        
+                        if is_problematic_type and not is_mariadb:
+                            # Skip DEFAULT for these types on MySQL
+                            print(f"Info: Skipping DEFAULT value for {mysql_type} column '{col_name}' on MySQL (not supported).")
+                            default_sql = ""
+                        else:
+                            default_value_clean = default_value.strip("'\"")
+                            default_sql = f" DEFAULT '{default_value_clean}'"
                     else:
                         default_sql = f" DEFAULT {default_value}"
                 
