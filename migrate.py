@@ -76,6 +76,9 @@ def map_sqlite_to_mysql_type(sqlite_type_raw, is_primary_key=False, is_unique=Fa
         print(f"Warning: Unknown SQLite type '{sqlite_type_raw}'. Defaulting to VARCHAR(255).")
         return "VARCHAR(255)"
 
+# Types that cannot have DEFAULT values on MySQL (but can on MariaDB)
+MYSQL_NO_DEFAULT_TYPES = ["TEXT", "LONGTEXT", "BLOB", "JSON", "GEOMETRY"]
+
 def is_mysql_server(mysql_cursor):
     """
     Detects whether the target server is MySQL or MariaDB.
@@ -84,14 +87,17 @@ def is_mysql_server(mysql_cursor):
     try:
         mysql_cursor.execute("SELECT VERSION()")
         version = mysql_cursor.fetchone()[0]
-        # MariaDB version strings contain 'MariaDB' (e.g., '10.5.8-MariaDB')
+        # MariaDB version strings contain 'MariaDB' (case-insensitive, e.g., '10.5.8-MariaDB')
         # MySQL version strings do not (e.g., '8.0.23')
-        is_mysql = 'MariaDB' not in version
+        is_mysql = 'mariadb' not in version.lower()
         server_type = "MySQL" if is_mysql else "MariaDB"
         print(f"Detected server type: {server_type} (version: {version})")
         return is_mysql
+    except mysql.connector.Error as e:
+        print(f"Warning: Database error while detecting server type: {e}. Assuming MySQL for safety.")
+        return True  # Default to MySQL for safety (stricter rules)
     except Exception as e:
-        print(f"Warning: Could not detect server type: {e}. Assuming MySQL for safety.")
+        print(f"Warning: Unexpected error detecting server type: {e}. Assuming MySQL for safety.")
         return True  # Default to MySQL for safety (stricter rules)
 
 def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
@@ -221,9 +227,7 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                 # Handle default values. Special case for created_at/updated_at to manage in app if needed.
                 if default_value is not None:
                     # Check if this is a type that can't have DEFAULT on MySQL (but can on MariaDB)
-                    # TEXT, LONGTEXT, BLOB, JSON, GEOMETRY can't have DEFAULT on MySQL
-                    types_no_default_mysql = ["TEXT", "LONGTEXT", "BLOB", "JSON", "GEOMETRY"]
-                    skip_default_for_type = is_mysql and any(t in mysql_type for t in types_no_default_mysql)
+                    skip_default_for_type = is_mysql and any(t in mysql_type for t in MYSQL_NO_DEFAULT_TYPES)
                     
                     if skip_default_for_type:
                         print(f"Info: Skipping DEFAULT value for {mysql_type} column '{col_name}' on MySQL (not supported)")
@@ -252,10 +256,9 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                             # Skip default for 'created_at' as we'll populate it in INSERT
                             # 'updated_at' will get ON UPDATE CURRENT_TIMESTAMP, not a DEFAULT
                             pass
-                        elif isinstance(default_value, str) and (
-                            "TEXT" in mysql_type or "VARCHAR" in mysql_type or
-                            "DATE" in mysql_type or "TIME" in mysql_type or "LONGTEXT" in mysql_type
-                        ):
+                        elif isinstance(default_value, str):
+                            # Handle string defaults for VARCHAR, DATE, TIME, and TEXT types (on MariaDB)
+                            # Note: TEXT/LONGTEXT would have been skipped above on MySQL
                             default_value_clean = default_value.strip("'\"")
                             default_sql = f" DEFAULT '{default_value_clean}'"
                         else:
