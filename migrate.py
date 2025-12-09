@@ -76,6 +76,24 @@ def map_sqlite_to_mysql_type(sqlite_type_raw, is_primary_key=False, is_unique=Fa
         print(f"Warning: Unknown SQLite type '{sqlite_type_raw}'. Defaulting to VARCHAR(255).")
         return "VARCHAR(255)"
 
+def is_mysql_server(mysql_cursor):
+    """
+    Detects whether the target server is MySQL or MariaDB.
+    Returns True if MySQL, False if MariaDB.
+    """
+    try:
+        mysql_cursor.execute("SELECT VERSION()")
+        version = mysql_cursor.fetchone()[0]
+        # MariaDB version strings contain 'MariaDB' (e.g., '10.5.8-MariaDB')
+        # MySQL version strings do not (e.g., '8.0.23')
+        is_mysql = 'MariaDB' not in version
+        server_type = "MySQL" if is_mysql else "MariaDB"
+        print(f"Detected server type: {server_type} (version: {version})")
+        return is_mysql
+    except Exception as e:
+        print(f"Warning: Could not detect server type: {e}. Assuming MySQL for safety.")
+        return True  # Default to MySQL for safety (stricter rules)
+
 def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
     """
     Migrates a SQLite database to MySQL, including table schemas and data.
@@ -102,6 +120,9 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
         if sqlite_cursor: sqlite_cursor.close()
         if sqlite_conn: sqlite_conn.close()
         return
+
+    # Detect server type (MySQL vs MariaDB)
+    is_mysql = is_mysql_server(mysql_cursor)
 
     try:
         mysql_cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
@@ -199,38 +220,46 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                 default_sql = ""
                 # Handle default values. Special case for created_at/updated_at to manage in app if needed.
                 if default_value is not None:
-                    # Fix for DATETIME('now') FUNCTION - convert SQLite syntax to MySQL
-                    default_str = str(default_value).upper().replace('"', "'")
-                    if ("DATETIME('NOW')" in default_str or default_str == "DATETIME('NOW')" or 
-                        default_str == "'CURRENT_TIMESTAMP'" or default_str == "CURRENT_TIMESTAMP"):
-                        # For older MySQL/MariaDB versions, use TIMESTAMP instead of DATETIME with CURRENT_TIMESTAMP
-                        if mysql_type == "DATETIME":
-                            mysql_type = "TIMESTAMP"
-                        default_sql = " DEFAULT CURRENT_TIMESTAMP"
-                    # Handle 'NULL' string defaults
-                    elif str(default_value).upper() in ["'NULL'", "NULL"]:
-                        default_sql = " DEFAULT NULL"
-                    # Handle numeric defaults but check for TINYINT overflow
-                    elif isinstance(default_value, (int, float)) or str(default_value).replace('.', '').replace('-', '').isdigit():
-                        numeric_value = float(default_value)
-                        # Check for TINYINT overflow (range is -128 to 127, or 0 to 255 for unsigned)
-                        if "TINYINT" in mysql_type and (numeric_value > 127 or numeric_value < -128):
-                            print(f"Warning: Default value {default_value} for TINYINT column '{col_name}' exceeds TINYINT range. Converting column to SMALLINT.")
-                            mysql_type = mysql_type.replace("TINYINT", "SMALLINT")
-                        default_sql = f" DEFAULT {default_value}"
-                    # Specific handling for the 'api_key' table's timestamps if they need app management
-                    elif table_name == 'api_key' and col_name in ['created_at', 'updated_at']:
-                        # Skip default for 'created_at' as we'll populate it in INSERT
-                        # 'updated_at' will get ON UPDATE CURRENT_TIMESTAMP, not a DEFAULT
-                        pass
-                    elif isinstance(default_value, str) and (
-                        "TEXT" in mysql_type or "VARCHAR" in mysql_type or
-                        "DATE" in mysql_type or "TIME" in mysql_type or "LONGTEXT" in mysql_type
-                    ):
-                        default_value_clean = default_value.strip("'\"")
-                        default_sql = f" DEFAULT '{default_value_clean}'"
+                    # Check if this is a type that can't have DEFAULT on MySQL (but can on MariaDB)
+                    # TEXT, LONGTEXT, BLOB, JSON, GEOMETRY can't have DEFAULT on MySQL
+                    types_no_default_mysql = ["TEXT", "LONGTEXT", "BLOB", "JSON", "GEOMETRY"]
+                    skip_default_for_type = is_mysql and any(t in mysql_type for t in types_no_default_mysql)
+                    
+                    if skip_default_for_type:
+                        print(f"Info: Skipping DEFAULT value for {mysql_type} column '{col_name}' on MySQL (not supported)")
                     else:
-                        default_sql = f" DEFAULT {default_value}"
+                        # Fix for DATETIME('now') FUNCTION - convert SQLite syntax to MySQL
+                        default_str = str(default_value).upper().replace('"', "'")
+                        if ("DATETIME('NOW')" in default_str or default_str == "DATETIME('NOW')" or 
+                            default_str == "'CURRENT_TIMESTAMP'" or default_str == "CURRENT_TIMESTAMP"):
+                            # For older MySQL/MariaDB versions, use TIMESTAMP instead of DATETIME with CURRENT_TIMESTAMP
+                            if mysql_type == "DATETIME":
+                                mysql_type = "TIMESTAMP"
+                            default_sql = " DEFAULT CURRENT_TIMESTAMP"
+                        # Handle 'NULL' string defaults
+                        elif str(default_value).upper() in ["'NULL'", "NULL"]:
+                            default_sql = " DEFAULT NULL"
+                        # Handle numeric defaults but check for TINYINT overflow
+                        elif isinstance(default_value, (int, float)) or str(default_value).replace('.', '').replace('-', '').isdigit():
+                            numeric_value = float(default_value)
+                            # Check for TINYINT overflow (range is -128 to 127, or 0 to 255 for unsigned)
+                            if "TINYINT" in mysql_type and (numeric_value > 127 or numeric_value < -128):
+                                print(f"Warning: Default value {default_value} for TINYINT column '{col_name}' exceeds TINYINT range. Converting column to SMALLINT.")
+                                mysql_type = mysql_type.replace("TINYINT", "SMALLINT")
+                            default_sql = f" DEFAULT {default_value}"
+                        # Specific handling for the 'api_key' table's timestamps if they need app management
+                        elif table_name == 'api_key' and col_name in ['created_at', 'updated_at']:
+                            # Skip default for 'created_at' as we'll populate it in INSERT
+                            # 'updated_at' will get ON UPDATE CURRENT_TIMESTAMP, not a DEFAULT
+                            pass
+                        elif isinstance(default_value, str) and (
+                            "TEXT" in mysql_type or "VARCHAR" in mysql_type or
+                            "DATE" in mysql_type or "TIME" in mysql_type or "LONGTEXT" in mysql_type
+                        ):
+                            default_value_clean = default_value.strip("'\"")
+                            default_sql = f" DEFAULT '{default_value_clean}'"
+                        else:
+                            default_sql = f" DEFAULT {default_value}"
                 
                 # Add ON UPDATE CURRENT_TIMESTAMP specifically for 'updated_at' column in api_key table
                 on_update_clause = ""
