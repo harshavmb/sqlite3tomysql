@@ -77,7 +77,9 @@ def map_sqlite_to_mysql_type(sqlite_type_raw, is_primary_key=False, is_unique=Fa
         return "VARCHAR(255)"
 
 # Types that cannot have DEFAULT values on MySQL (but can on MariaDB)
-MYSQL_NO_DEFAULT_TYPES = ["TEXT", "LONGTEXT", "BLOB", "JSON", "GEOMETRY"]
+# Listed in order from most specific to least specific to avoid substring matching issues
+# Note: SQLite TEXT typically maps to MySQL LONGTEXT via map_sqlite_to_mysql_type()
+MYSQL_NO_DEFAULT_TYPES = ["LONGTEXT", "TEXT", "BLOB", "JSON", "GEOMETRY"]
 
 def is_mysql_server(mysql_cursor):
     """
@@ -227,7 +229,12 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
                 # Handle default values. Special case for created_at/updated_at to manage in app if needed.
                 if default_value is not None:
                     # Check if this is a type that can't have DEFAULT on MySQL (but can on MariaDB)
-                    skip_default_for_type = is_mysql and any(t in mysql_type for t in MYSQL_NO_DEFAULT_TYPES)
+                    # Use startswith to avoid false positives (e.g., LONGTEXT shouldn't match TEXT alone)
+                    # The check is done in order from longest to shortest to match correctly
+                    skip_default_for_type = is_mysql and any(
+                        mysql_type.startswith(t) or mysql_type.split()[0] == t 
+                        for t in MYSQL_NO_DEFAULT_TYPES
+                    )
                     
                     if skip_default_for_type:
                         print(f"Info: Skipping DEFAULT value for {mysql_type} column '{col_name}' on MySQL (not supported)")
