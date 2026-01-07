@@ -17,13 +17,13 @@ def verify_migration(mysql_config):
     try:
         conn = mysql.connector.connect(**mysql_config)
         cursor = conn.cursor()
-        print(f"✅ Connected to MySQL database: {mysql_config['database']}")
+        print(f"Connected to MySQL database: {mysql_config['database']}")
         print("=" * 80)
         
         # Get list of tables
         cursor.execute("SHOW TABLES")
         tables = [table[0] for table in cursor.fetchall()]
-        print(f"\n📊 Found {len(tables)} tables in MySQL:")
+        print(f"\nFound {len(tables)} tables in MySQL:")
         print(f"   {', '.join(tables)}\n")
         
         # Verify each table
@@ -33,10 +33,10 @@ def verify_migration(mysql_config):
             'status_page', 'metrics'
         ]
         
-        print("🔍 Verifying tables:\n")
+        print("Verifying tables:\n")
         for table in expected_tables:
             if table not in tables:
-                print(f"   ❌ Table '{table}' is MISSING!")
+                print(f"   Table '{table}' is MISSING!")
                 continue
             
             # Get row count
@@ -47,7 +47,7 @@ def verify_migration(mysql_config):
             cursor.execute(f"DESCRIBE `{table}`")
             columns = cursor.fetchall()
             
-            print(f"   ✅ Table: `{table}`")
+            print(f"   Table: `{table}`")
             print(f"      - Rows: {count}")
             print(f"      - Columns: {len(columns)}")
             
@@ -64,7 +64,7 @@ def verify_migration(mysql_config):
         
         # Detailed verification of edge cases
         print("=" * 80)
-        print("\n🔬 Detailed Edge Case Verification:\n")
+        print("\nDetailed Edge Case Verification:\n")
         
         # 1. Check TIME data type in maintenance table
         print("1. TIME Data Type (maintenance table):")
@@ -138,16 +138,16 @@ def verify_migration(mysql_config):
             print(f"   - {row[0]}: {row[1]}...")
         
         print("\n" + "=" * 80)
-        print("✅ MIGRATION VERIFICATION COMPLETE!")
+        print("MIGRATION VERIFICATION COMPLETE!")
         print("=" * 80)
         
         cursor.close()
         conn.close()
         
     except Error as e:
-        print(f"❌ Error connecting to MySQL: {e}")
+        print(f"Error connecting to MySQL: {e}")
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"Unexpected error: {e}")
 
 if __name__ == "__main__":
     mysql_config = {
