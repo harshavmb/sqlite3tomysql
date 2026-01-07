@@ -259,7 +259,7 @@ def create_test_database(db_path='kuma.db'):
     conn.commit()
     conn.close()
     
-    print(f"\n✅ Test database created successfully: {db_path}")
+    print(f"\nTest database created successfully: {db_path}")
     print("\nDatabase statistics:")
     
     # Reopen to show statistics
@@ -279,4 +279,4 @@ def create_test_database(db_path='kuma.db'):
 
 if __name__ == "__main__":
     create_test_database()
-    print("\n✅ Ready to run migration with: python migrate.py")
+    print("\nReady to run migration with: python migrate.py")

@@ -91,7 +91,7 @@ def create_test_db_with_text_defaults():
     conn.commit()
     conn.close()
     
-    print(f"\n✅ Test database created: {db_path}")
+    print(f"\nTest database created: {db_path}")
     
     # Show statistics
     conn = sqlite3.connect(db_path)
@@ -142,10 +142,10 @@ def run_migration_test(sqlite_db_path):
     # Run migration
     try:
         migrate_sqlite_to_mysql(sqlite_db_path, mysql_config)
-        print("\n✅ Migration completed")
+        print("\nMigration completed")
         return True
     except Exception as e:
-        print(f"\n❌ Migration failed: {e}")
+        print(f"\nMigration failed: {e}")
         return False
 
 def verify_mysql_schema():
@@ -201,11 +201,11 @@ def verify_mysql_schema():
                 if is_text_blob:
                     if default is not None and default != 'NULL':
                         # This is an ERROR on MySQL
-                        msg = f"  ❌ PROBLEM: `{col_name}` ({col_type}) has DEFAULT '{default}'"
+                        msg = f"  PROBLEM: `{col_name}` ({col_type}) has DEFAULT '{default}'"
                         print(msg)
                         issues_found.append(f"{table}.{col_name}: {col_type} with DEFAULT {default}")
                     else:
-                        msg = f"  ✅ CORRECT: `{col_name}` ({col_type}) has no DEFAULT"
+                        msg = f"  CORRECT: `{col_name}` ({col_type}) has no DEFAULT"
                         print(msg)
                         successes.append(f"{table}.{col_name}: {col_type}")
                 elif default is not None:
@@ -216,17 +216,17 @@ def verify_mysql_schema():
         print("="*80)
         print("SUMMARY")
         print("="*80)
-        print(f"\n✅ Correct TEXT/BLOB columns (no DEFAULT): {len(successes)}")
+        print(f"\nCorrect TEXT/BLOB columns (no DEFAULT): {len(successes)}")
         for s in successes:
             print(f"   - {s}")
         
         if issues_found:
-            print(f"\n❌ Problematic TEXT/BLOB columns (has DEFAULT): {len(issues_found)}")
+            print(f"\nProblematic TEXT/BLOB columns (has DEFAULT): {len(issues_found)}")
             for issue in issues_found:
                 print(f"   - {issue}")
-            print("\n⚠️  These DEFAULT values will cause Error 1101 on MySQL!")
+            print("\nThese DEFAULT values will cause Error 1101 on MySQL!")
         else:
-            print("\n✅ No issues found! All TEXT/BLOB columns correctly have no DEFAULT values on MySQL.")
+            print("\nNo issues found! All TEXT/BLOB columns correctly have no DEFAULT values on MySQL.")
         
         # Test data integrity
         print("\n" + "="*80)
@@ -259,7 +259,7 @@ def verify_mysql_schema():
         return len(issues_found) == 0
         
     except mysql.connector.Error as e:
-        print(f"❌ Error verifying MySQL schema: {e}")
+        print(f"Error verifying MySQL schema: {e}")
         return False
 
 if __name__ == "__main__":
@@ -277,11 +277,11 @@ if __name__ == "__main__":
         
         if success:
             print("\n" + "="*80)
-            print("✅ TEST PASSED: LONGTEXT columns correctly have no DEFAULT on MySQL")
+            print("TEST PASSED: LONGTEXT columns correctly have no DEFAULT on MySQL")
             print("="*80)
         else:
             print("\n" + "="*80)
-            print("❌ TEST FAILED: Some LONGTEXT columns incorrectly have DEFAULT values")
+            print("TEST FAILED: Some LONGTEXT columns incorrectly have DEFAULT values")
             print("="*80)
     else:
-        print("\n❌ Migration failed, cannot verify schema")
+        print("\nMigration failed, cannot verify schema")

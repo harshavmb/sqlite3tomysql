@@ -131,6 +131,11 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
 
     # Detect server type (MySQL vs MariaDB)
     is_mysql = is_mysql_server(mysql_cursor)
+    
+    # Determined collation to use for CREATE TABLE
+    # Default to utf8mb4_unicode_ci if not specified in config
+    db_collation = mysql_config.get('collation', 'utf8mb4_unicode_ci')
+    print(f"Using collation: {db_collation}")
 
     try:
         mysql_cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
@@ -305,7 +310,7 @@ def migrate_sqlite_to_mysql(sqlite_db_path, mysql_config):
             # create_stmt = f"CREATE TABLE IF NOT EXISTS `{table_name}` (\n    {joined_col_defs}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;"
             
             # The most compatible CREATE TABLE statement based on our troubleshooting
-            create_stmt = f"CREATE TABLE IF NOT EXISTS {escaped_table_name} (\n    {joined_col_defs}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
+            create_stmt = f"CREATE TABLE IF NOT EXISTS {escaped_table_name} (\n    {joined_col_defs}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE={db_collation};"
 
             print(f"Generated CREATE TABLE statement:\n{create_stmt}")
 
@@ -419,6 +424,7 @@ mysql_connection_config = {
     'user': 'mysqluser', ## database user
     'password': 'changeme', ### password
     'database': 'mysqldatabase' ## database name
+    # 'collation': 'utf8mb4_uca1400_ai_ci' ## Optional: override collation (default: utf8mb4_unicode_ci)
 }
 
 # --- Run the migration ---

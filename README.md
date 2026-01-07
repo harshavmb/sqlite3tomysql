@@ -38,7 +38,8 @@ Before running the migration script, ensure you have the following setup:
        'host': 'localhost',           # MySQL server host
        'user': 'kuma_user',          # Database user
        'password': 'your_secure_password',  # User password
-       'database': 'mysqldatabase'            # Target database name
+       'database': 'mysqldatabase',            # Target database name
+       # 'collation': 'utf8mb4_uca1400_ai_ci' # Optional: override collation (default: utf8mb4_unicode_ci)
    }
    ```
 
@@ -46,6 +47,8 @@ Before running the migration script, ensure you have the following setup:
 
 The migration script provides comprehensive SQLite to MySQL/MariaDB migration with the following capabilities:
 
+- **Configurable Collation**: Supports custom collations via the `collation` configuration option (default: `utf8mb4_unicode_ci`)
+  - Solves errors like `1273 (HY000): Unknown collation` on newer MariaDB versions
 - **Smart Type Mapping**: Automatically converts SQLite data types to appropriate MySQL equivalents
   - Correctly maps `TIME` columns to MySQL `TIME` (not `DATETIME`)
   - Handles `DATE`, `DATETIME`, and `TIMESTAMP` appropriately
@@ -174,6 +177,7 @@ For migrating Uptime Kuma from SQLite3 to MariaDB, follow these steps carefully:
 ### Known Quirks Handled
 
 This script handles several quirks specific to the migration:
+- **Collation Compatibility**: Allows overriding the connection and table collation to resolve compatibility issues (e.g., using `utf8mb4_uca1400_ai_ci` on newer MariaDB or `utf8mb4_general_ci` on older systems)
 - **Reserved Keywords**: Tables named `group` (MariaDB won't allow as it's a reserved keyword, but the script circumvents this with escape characters)
 - **TIME vs DATETIME Mapping**: Correctly preserves `TIME` columns (like `start_time`/`end_time` in `maintenance` table) as `TIME` in MySQL instead of incorrectly converting to `DATETIME`
 - **Index Length Limitations**: Handles MySQL's 767-byte index key length limit by adjusting VARCHAR sizes for indexed columns
